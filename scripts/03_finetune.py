@@ -1,6 +1,6 @@
 import json
-import os
 import random
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +9,8 @@ from datasets import Dataset
 from peft import LoraConfig, TaskType, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
 from trl import SFTTrainer
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 def seed_everything(seed: int = 42) -> None:
@@ -20,28 +22,29 @@ def seed_everything(seed: int = 42) -> None:
     torch.backends.cudnn.benchmark = False
 
 
-def load_data(path: str = "data/spider_formatted.json") -> list:
+def load_data(path: str = "data/spider_train_formatted.json") -> list:
     with open(path) as f:
         return json.load(f)
 
 
-def format_for_training(entry: dict) -> dict:
-    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
-    text = tokenizer.apply_chat_template(
-        entry["messages"], tokenize=False, add_generation_prompt=True
-    )
-    return {"text": text}
-
-
 def finetune_lora(
-    model_name: str = "Qwen/Qwen2.5-0.5B-Instruct",
-    output_dir: str = "models/lora_spider",
+    model_name: str = "Qwen/Qwen2.5-3B-Instruct",
+    output_dir: str = "models/lora_spider_run1",
     num_epochs: int = 3,
     batch_size: int = 4,
     learning_rate: float = 2e-4,
+    lora_r: int = 16,
+    lora_alpha: int = 32,
+    lora_dropout: float = 0.05,
     max_seq_length: int = 512,
+    run_name: str = "Run 1",
 ):
     seed_everything(42)
+
+    print(f"=== {run_name} ===")
+    print(f"Modelo: {model_name}")
+    print(f"LoRA: r={lora_r}, alpha={lora_alpha}, dropout={lora_dropout}")
+    print(f"LR: {learning_rate} | Epochs: {num_epochs} | Batch: {batch_size}")
 
     print(f"Carregando modelo base: {model_name}")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -55,9 +58,9 @@ def finetune_lora(
 
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
-        r=16,
-        lora_alpha=32,
-        lora_dropout=0.05,
+        r=lora_r,
+        lora_alpha=lora_alpha,
+        lora_dropout=lora_dropout,
         bias="none",
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
     )
@@ -91,7 +94,7 @@ def finetune_lora(
         model=model,
         train_dataset=dataset,
         args=training_args,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         max_seq_length=max_seq_length,
         dataset_text_field="text",
     )
@@ -106,4 +109,32 @@ def finetune_lora(
 
 
 if __name__ == "__main__":
-    finetune_lora()
+    seed_everything(42)
+
+    print("=" * 60)
+    print("RODADA 1: lr=2e-4, r=16, alpha=32, epochs=3")
+    print("=" * 60)
+    finetune_lora(
+        output_dir="models/lora_spider_run1",
+        learning_rate=2e-4,
+        lora_r=16,
+        lora_alpha=32,
+        num_epochs=3,
+        batch_size=4,
+        run_name="Run 1 (lr=2e-4, r=16)",
+    )
+
+    print("\n" + "=" * 60)
+    print("RODADA 2: lr=1e-4, r=8, alpha=16, epochs=5")
+    print("=" * 60)
+    finetune_lora(
+        output_dir="models/lora_spider_run2",
+        learning_rate=1e-4,
+        lora_r=8,
+        lora_alpha=16,
+        num_epochs=5,
+        batch_size=4,
+        run_name="Run 2 (lr=1e-4, r=8)",
+    )
+
+    print("\nAmbas as rodadas concluídas!")
