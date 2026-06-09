@@ -1,12 +1,16 @@
 import json
-import os
 import random
-import sqlite3
+import sys
 from pathlib import Path
 
 import numpy as np
 import torch
+from deepeval import evaluate
+from deepeval.test_case import LLMTestCase
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from custom_metrics import ExecutionAccuracyMetric
 
 
 def seed_everything(seed: int = 42) -> None:
@@ -18,26 +22,31 @@ def seed_everything(seed: int = 42) -> None:
     torch.backends.cudnn.benchmark = False
 
 
-def load_spider_data(path: str = "data/spider_formatted.json") -> list:
+def load_json(path: str) -> list:
     with open(path) as f:
         return json.load(f)
 
 
-def execute_sql(query: str, db_id: str, db_dir: str = "data/spider/database") -> list:
-    db_path = os.path.join(db_dir, db_id, f"{db_id}.sqlite")
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    try:
-        cursor.execute(query)
-        result = sorted(cursor.fetchall())
-    except Exception:
-        result = []
-    finally:
-        conn.close()
-    return result
+def build_few_shot_prompt(train_data: list, question_messages: list, n_shots: int = 3) -> list:
+    system_msg = question_messages[0]
+    user_msg = question_messages[1]
+
+    few_shot_examples = train_data[:n_shots]
+    few_shot_messages = []
+    for ex in few_shot_examples:
+        few_shot_messages.append({"role": "user", "content": ex["messages"][1]["content"]})
+        few_shot_messages.append({"role": "assistant", "content": ex["messages"][2]["content"]})
+
+    return [system_msg] + few_shot_messages + [user_msg]
 
 
-def run_baseline(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct", max_samples: int = 50):
+def run_baseline(
+    model_name: str = "Qwen/Qwen2.5-3B-Instruct",
+    train_path: str = "data/spider_train_formatted.json",
+    dev_path: str = "data/spider_dev_formatted.json",
+    output_path: str = "data/baseline_results.json",
+    max_samples: int = 50,
+):
     seed_everything(42)
 
     print(f"Carregando modelo base: {model_name}")
@@ -48,13 +57,17 @@ def run_baseline(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct", max_samples: in
         device_map="auto",
     )
 
-    data = load_spider_data()
-    results = []
+    train_data = load_json(train_path)
+    dev_data = load_json(dev_path)
 
-    for i, entry in enumerate(data[:max_samples]):
-        messages = entry["messages"]
-        expected_sql = entry["expected_sql"]
-        db_id = entry["db_id"]
+    metric = ExecutionAccuracyMetric()
+    test_cases = []
+
+    print(f"Gerando queries para {min(max_samples, len(dev_data))} exemplos do dev set...")
+    generated_outputs = []
+
+    for i, entry in enumerate(dev_data[:max_samples]):
+        messages = build_few_shot_prompt(train_data, entry["messages"])
 
         text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = tokenizer(text, return_tensors="pt").to(model.device)
@@ -65,30 +78,42 @@ def run_baseline(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct", max_samples: in
                 max_new_tokens=256,
                 temperature=0.0,
                 do_sample=False,
+                pad_token_id=tokenizer.eos_token_id,
             )
 
-        generated_sql = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+        generated_sql = tokenizer.decode(
+            outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
+        )
+        generated_outputs.append(generated_sql)
 
-        predicted_result = execute_sql(generated_sql, db_id)
-        expected_result = execute_sql(expected_sql, db_id)
-        correct = predicted_result == expected_result
+        test_case = LLMTestCase(
+            input=messages[-1]["content"],
+            actual_output=generated_sql,
+            expected_output=entry["expected_sql"],
+            additional_metadata={"db_id": entry["db_id"]},
+        )
+        test_cases.append(test_case)
 
+        print(f"[{i+1}/{max_samples}] SQL gerado | db={entry['db_id']}")
+
+    print(f"\nAvaliando com Execution Accuracy (DeepEval)...")
+    eval_results = evaluate(test_cases, [metric])
+
+    results = []
+    for i, entry in enumerate(dev_data[:max_samples]):
         results.append({
-            "question": messages[-1]["content"],
-            "generated_sql": generated_sql,
-            "expected_sql": expected_sql,
-            "correct": correct,
-            "db_id": db_id,
+            "question": entry["messages"][1]["content"],
+            "generated_sql": generated_outputs[i],
+            "expected_sql": entry["expected_sql"],
+            "db_id": entry["db_id"],
         })
 
-        print(f"[{i+1}/{max_samples}] {'OK' if correct else 'FALHOU'} | db={db_id}")
+    accuracy = eval_results.overall_score if hasattr(eval_results, "overall_score") else 0.0
 
-    accuracy = sum(r["correct"] for r in results) / len(results) if results else 0
-    print(f"\nAcurácia baseline (zero-shot): {accuracy:.2%}")
-
-    output_path = "data/baseline_results.json"
     with open(output_path, "w") as f:
         json.dump({"accuracy": accuracy, "details": results}, f, indent=2)
+
+    print(f"\nAcurácia baseline (few-shot): {accuracy:.2%}")
     print(f"Resultados salvos em {output_path}")
 
     return accuracy
