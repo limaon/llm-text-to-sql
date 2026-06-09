@@ -7,7 +7,12 @@ import numpy as np
 import torch
 from datasets import Dataset
 from peft import LoraConfig, TaskType, get_peft_model
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    TrainingArguments,
+)
 from trl import SFTTrainer
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -30,7 +35,7 @@ def load_data(path: str = "data/spider_train_formatted.json") -> list:
 def finetune_lora(
     model_name: str = "Qwen/Qwen2.5-3B-Instruct",
     output_dir: str = "models/lora_spider_run1",
-    num_epochs: int = 3,
+    num_epochs: int = 1,
     batch_size: int = 4,
     learning_rate: float = 2e-4,
     lora_r: int = 16,
@@ -50,9 +55,16 @@ def finetune_lora(
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer.pad_token = tokenizer.eos_token
 
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_use_double_quant=True,
+    )
+
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=torch.float16,
+        quantization_config=bnb_config,
         device_map="auto",
     )
 
@@ -72,7 +84,7 @@ def finetune_lora(
     texts = []
     for entry in data:
         text = tokenizer.apply_chat_template(
-            entry["messages"], tokenize=False, add_generation_prompt=True
+            entry["messages"], tokenize=False, add_generation_prompt=False
         )
         texts.append(text)
 
@@ -112,29 +124,29 @@ if __name__ == "__main__":
     seed_everything(42)
 
     print("=" * 60)
-    print("RODADA 1: lr=2e-4, r=16, alpha=32, epochs=3")
+    print("RODADA 1: lr=2e-4, r=16, alpha=32, epochs=1")
     print("=" * 60)
     finetune_lora(
         output_dir="models/lora_spider_run1",
         learning_rate=2e-4,
         lora_r=16,
         lora_alpha=32,
-        num_epochs=3,
+        num_epochs=1,
         batch_size=4,
-        run_name="Run 1 (lr=2e-4, r=16)",
+        run_name="Run 1 (lr=2e-4, r=16, ep=1)",
     )
 
     print("\n" + "=" * 60)
-    print("RODADA 2: lr=1e-4, r=8, alpha=16, epochs=5")
+    print("RODADA 2: lr=1e-4, r=8, alpha=16, epochs=2")
     print("=" * 60)
     finetune_lora(
         output_dir="models/lora_spider_run2",
         learning_rate=1e-4,
         lora_r=8,
         lora_alpha=16,
-        num_epochs=5,
+        num_epochs=2,
         batch_size=4,
-        run_name="Run 2 (lr=1e-4, r=8)",
+        run_name="Run 2 (lr=1e-4, r=8, ep=2)",
     )
 
     print("\nAmbas as rodadas concluídas!")
