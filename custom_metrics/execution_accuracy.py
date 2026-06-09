@@ -18,7 +18,7 @@ class ExecutionAccuracyMetric(BaseMetric):
     def __init__(self, db_dir: str = "data/spider/database"):
         super().__init__()
         self.db_dir = db_dir
-        self.threshold = 0.0
+        self.threshold = 1.0
 
     def measure(self, test_case: LLMTestCase) -> float:
         predicted_sql: str = test_case.actual_output
