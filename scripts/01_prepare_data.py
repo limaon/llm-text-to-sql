@@ -134,9 +134,9 @@ def prepare_spider(db_dir: str = "data/spider/database") -> None:
 def prepare_mmlu(output_path: str = "data/mmlu_150.json") -> None:
     print("Processando MMLU...")
     subjects = {
-        "STEM": "computer_science",
+        "STEM": "college_computer_science",
         "Humanities": "philosophy",
-        "Social Sciences": "economics"
+        "Social Sciences": "econometrics"
     }
 
     all_samples = []
