@@ -7,12 +7,8 @@ import numpy as np
 import torch
 from datasets import Dataset
 from peft import LoraConfig, TaskType, get_peft_model
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    BitsAndBytesConfig,
-    TrainingArguments,
-)
+from transformers import (AutoModelForCausalLM, AutoTokenizer,
+                          BitsAndBytesConfig, TrainingArguments)
 from trl import SFTTrainer
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -54,6 +50,7 @@ def finetune_lora(
     print(f"Carregando modelo base: {model_name}")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "right"
 
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
@@ -118,6 +115,10 @@ def finetune_lora(
     model.save_pretrained(output_dir)
     tokenizer.save_pretrained(output_dir)
     print(f"LoRA adapters salvos em {output_dir}")
+
+    del model
+    del trainer
+    torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
