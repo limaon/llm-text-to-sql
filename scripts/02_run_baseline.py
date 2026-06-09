@@ -5,7 +5,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from deepeval import evaluate
 from deepeval.test_case import LLMTestCase
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -61,10 +60,10 @@ def run_baseline(
     dev_data = load_json(dev_path)
 
     metric = ExecutionAccuracyMetric()
-    test_cases = []
 
-    print(f"Gerando queries para {min(max_samples, len(dev_data))} exemplos do dev set...")
-    generated_outputs = []
+    print(f"Gerando e avaliando {min(max_samples, len(dev_data))} exemplos do dev set...")
+    results = []
+    correct_count = 0
 
     for i, entry in enumerate(dev_data[:max_samples]):
         messages = build_few_shot_prompt(train_data, entry["messages"])
@@ -84,7 +83,6 @@ def run_baseline(
         generated_sql = tokenizer.decode(
             outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
         )
-        generated_outputs.append(generated_sql)
 
         test_case = LLMTestCase(
             input=messages[-1]["content"],
@@ -92,32 +90,25 @@ def run_baseline(
             expected_output=entry["expected_sql"],
             additional_metadata={"db_id": entry["db_id"]},
         )
-        test_cases.append(test_case)
 
-        print(f"[{i+1}/{max_samples}] SQL gerado | db={entry['db_id']}")
-
-    print(f"\nAvaliando com Execution Accuracy (DeepEval)...")
-    evaluate(test_cases, [metric])
-
-    results = []
-    correct_count = 0
-
-    for i, test_case in enumerate(test_cases):
-        score = test_case.metrics_metadata[0].score if test_case.metrics_metadata else 0.0
+        score = metric.measure(test_case)
         is_correct = bool(score == 1.0)
 
         if is_correct:
             correct_count += 1
 
         results.append({
-            "question": dev_data[i]["messages"][1]["content"],
-            "generated_sql": generated_outputs[i],
-            "expected_sql": dev_data[i]["expected_sql"],
-            "db_id": dev_data[i]["db_id"],
+            "question": entry["messages"][1]["content"],
+            "generated_sql": generated_sql,
+            "expected_sql": entry["expected_sql"],
+            "db_id": entry["db_id"],
             "correct": is_correct,
         })
 
-    accuracy = correct_count / len(test_cases) if test_cases else 0.0
+        status = "OK" if is_correct else "FALHOU"
+        print(f"[{i+1}/{max_samples}] {status} | db={entry['db_id']}")
+
+    accuracy = correct_count / len(results) if results else 0.0
 
     with open(output_path, "w") as f:
         json.dump({"accuracy": accuracy, "details": results}, f, indent=2)
