@@ -4,6 +4,6 @@ datasets==3.1.0
 peft==0.13.2
 trl==0.12.1
 bitsandbytes==0.44.1
-deepeval==2.25.5
+deepeval
 pysqlite3
 pytest==8.3.4
