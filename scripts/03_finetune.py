@@ -97,7 +97,6 @@ def finetune_lora(
         logging_steps=10,
         save_strategy="epoch",
         report_to="none",
-        gradient_checkpointing=True,
         optim="paged_adamw_8bit",
         seed=42,
     )
