@@ -37,20 +37,27 @@ def download_spider_databases(target_dir: str = "data/spider") -> None:
     zip_path = "data/spider.zip"
     subprocess.run(["gdown", gdown_id, "-O", zip_path], check=True)
 
-    print("Extraindo bancos de dados...")
+    print("Extraindo arquivos...")
     with zipfile.ZipFile(zip_path, "r") as zf:
-        for name in zf.namelist():
-            if name.startswith("database/") or name.startswith("spider/database/"):
-                zf.extract(name, target_dir)
+        zf.extractall(target_dir)
 
-    for prefix in ["spider/database", "database"]:
-        extracted = os.path.join(target_dir, prefix)
-        if os.path.isdir(extracted):
-            if extracted != db_dir:
-                shutil.move(extracted, db_dir)
+    for root, dirs, files in os.walk(target_dir):
+        if "database" in dirs:
+            src = os.path.join(root, "database")
+            if src != db_dir:
+                if os.path.exists(db_dir):
+                    shutil.rmtree(db_dir)
+                shutil.move(src, db_dir)
             break
 
     os.remove(zip_path)
+
+    if not os.path.exists(db_dir):
+        print("AVISO: pasta 'database' não encontrada no zip. Conteúdo extraído:")
+        for item in os.listdir(target_dir):
+            print(f"  - {item}")
+        raise FileNotFoundError("Pasta 'database' não encontrada após extração")
+
     print("Bancos de dados baixados com sucesso!")
 
 
