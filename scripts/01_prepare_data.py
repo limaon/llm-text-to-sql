@@ -2,13 +2,12 @@ import json
 import os
 import random
 import sqlite3
-import zipfile
 from pathlib import Path
 
 import numpy as np
 import torch
 from datasets import load_dataset
-from huggingface_hub import hf_hub_download
+from huggingface_hub import snapshot_download
 
 
 def seed_everything(seed: int = 42) -> None:
@@ -30,17 +29,14 @@ def download_spider_databases(target_dir: str = "data/spider") -> None:
     print("Baixando bancos de dados oficiais do Spider...")
     os.makedirs(target_dir, exist_ok=True)
 
-    zip_path = hf_hub_download(
-        repo_id="tau/spider",
-        filename="data/spider.zip",
+    snapshot_download(
+        repo_id="xlangai/spider",
         repo_type="dataset",
+        local_dir=target_dir,
+        allow_patterns=["database/*"],
     )
 
-    print("Extraindo arquivos...")
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall("data/")
-
-    print("Bancos de dados baixados e extraídos com sucesso!")
+    print("Bancos de dados baixados com sucesso!")
 
 
 def format_schema(db_id: str, db_dir: str = "data/spider/database") -> str:
