@@ -4,6 +4,7 @@ import random
 import shutil
 import sqlite3
 import subprocess
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -22,24 +23,34 @@ def seed_everything(seed: int = 42) -> None:
 
 
 def download_spider_databases(target_dir: str = "data/spider") -> None:
-    """Baixa os bancos de dados oficiais do Spider via git clone."""
+    """Baixa os bancos de dados oficiais do Spider do Google Drive."""
     db_dir = os.path.join(target_dir, "database")
     if os.path.exists(db_dir):
         return
 
-    print("Baixando bancos de dados do Spider via GitHub...")
+    print("Baixando bancos de dados do Spider do Google Drive...")
     os.makedirs(target_dir, exist_ok=True)
 
-    tmp_dir = "data/spider_tmp"
-    subprocess.run(
-        ["git", "clone", "--depth", "1", "https://github.com/taoyds/spider.git", tmp_dir],
-        check=True,
-    )
+    subprocess.run(["pip", "install", "-q", "gdown"], check=True)
 
-    src_db = os.path.join(tmp_dir, "database")
-    shutil.move(src_db, db_dir)
-    shutil.rmtree(tmp_dir)
+    gdown_id = "1403EGqzIDoHMdQF4c9Bkyl7dZLZ5Wt6J"
+    zip_path = "data/spider.zip"
+    subprocess.run(["gdown", gdown_id, "-O", zip_path], check=True)
 
+    print("Extraindo bancos de dados...")
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        for name in zf.namelist():
+            if name.startswith("database/") or name.startswith("spider/database/"):
+                zf.extract(name, target_dir)
+
+    for prefix in ["spider/database", "database"]:
+        extracted = os.path.join(target_dir, prefix)
+        if os.path.isdir(extracted):
+            if extracted != db_dir:
+                shutil.move(extracted, db_dir)
+            break
+
+    os.remove(zip_path)
     print("Bancos de dados baixados com sucesso!")
 
 
