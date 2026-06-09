@@ -32,7 +32,7 @@ def finetune_lora(
     model_name: str = "Qwen/Qwen2.5-3B-Instruct",
     output_dir: str = "models/lora_spider_run1",
     num_epochs: int = 1,
-    batch_size: int = 4,
+    batch_size: int = 2,
     learning_rate: float = 2e-4,
     lora_r: int = 16,
     lora_alpha: int = 32,
@@ -91,11 +91,14 @@ def finetune_lora(
         output_dir=output_dir,
         num_train_epochs=num_epochs,
         per_device_train_batch_size=batch_size,
+        gradient_accumulation_steps=2,
         learning_rate=learning_rate,
         fp16=True,
         logging_steps=10,
         save_strategy="epoch",
         report_to="none",
+        gradient_checkpointing=True,
+        optim="paged_adamw_8bit",
         seed=42,
     )
 
@@ -133,7 +136,7 @@ if __name__ == "__main__":
         lora_r=16,
         lora_alpha=32,
         num_epochs=1,
-        batch_size=4,
+        batch_size=2,
         run_name="Run 1 (lr=2e-4, r=16, ep=1)",
     )
 
@@ -146,7 +149,7 @@ if __name__ == "__main__":
         lora_r=8,
         lora_alpha=16,
         num_epochs=2,
-        batch_size=4,
+        batch_size=2,
         run_name="Run 2 (lr=1e-4, r=8, ep=2)",
     )
 
