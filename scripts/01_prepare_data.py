@@ -1,13 +1,14 @@
 import json
 import os
 import random
+import shutil
 import sqlite3
+import subprocess
 from pathlib import Path
 
 import numpy as np
 import torch
 from datasets import load_dataset
-from huggingface_hub import snapshot_download
 
 
 def seed_everything(seed: int = 42) -> None:
@@ -21,20 +22,23 @@ def seed_everything(seed: int = 42) -> None:
 
 
 def download_spider_databases(target_dir: str = "data/spider") -> None:
-    """Baixa e extrai os bancos de dados oficiais do Spider se não existirem."""
+    """Baixa os bancos de dados oficiais do Spider via git clone."""
     db_dir = os.path.join(target_dir, "database")
     if os.path.exists(db_dir):
         return
 
-    print("Baixando bancos de dados oficiais do Spider...")
+    print("Baixando bancos de dados do Spider via GitHub...")
     os.makedirs(target_dir, exist_ok=True)
 
-    snapshot_download(
-        repo_id="xlangai/spider",
-        repo_type="dataset",
-        local_dir=target_dir,
-        allow_patterns=["database/*"],
+    tmp_dir = "data/spider_tmp"
+    subprocess.run(
+        ["git", "clone", "--depth", "1", "https://github.com/taoyds/spider.git", tmp_dir],
+        check=True,
     )
+
+    src_db = os.path.join(tmp_dir, "database")
+    shutil.move(src_db, db_dir)
+    shutil.rmtree(tmp_dir)
 
     print("Bancos de dados baixados com sucesso!")
 
