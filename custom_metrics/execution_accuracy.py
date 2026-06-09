@@ -19,6 +19,9 @@ class ExecutionAccuracyMetric(BaseMetric):
         super().__init__()
         self.db_dir = db_dir
         self.threshold = 1.0
+        self.score = 0.0
+        self.success = False
+        self.reason = None
 
     def measure(self, test_case: LLMTestCase) -> float:
         predicted_sql: str = test_case.actual_output
@@ -39,7 +42,11 @@ class ExecutionAccuracyMetric(BaseMetric):
             self.score = 0.0
 
         self.success = self.score >= self.threshold
+        self.reason = None if self.success else "SQL execution result does not match expected output"
         return self.score
+
+    async def a_measure(self, test_case: LLMTestCase, _show_indicator: bool = True) -> float:
+        return self.measure(test_case)
 
     def _extract_sql(self, text: str) -> str:
         text = text.strip()
