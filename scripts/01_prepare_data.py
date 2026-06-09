@@ -37,28 +37,26 @@ def download_spider_databases(target_dir: str = "data/spider") -> None:
     zip_path = "data/spider.zip"
     subprocess.run(["gdown", gdown_id, "-O", zip_path], check=True)
 
-    print("Extraindo arquivos...")
+    print("Extraindo bancos de dados...")
     with zipfile.ZipFile(zip_path, "r") as zf:
-        zf.extractall(target_dir)
+        for name in zf.namelist():
+            if name.startswith("spider_data/database/") and not name.startswith("__MACOSX"):
+                zf.extract(name, target_dir)
 
-    for root, dirs, files in os.walk(target_dir):
-        if "database" in dirs:
-            src = os.path.join(root, "database")
-            if src != db_dir:
-                if os.path.exists(db_dir):
-                    shutil.rmtree(db_dir)
-                shutil.move(src, db_dir)
-            break
+    extracted_db = os.path.join(target_dir, "spider_data", "database")
+    if os.path.isdir(extracted_db):
+        if os.path.exists(db_dir):
+            shutil.rmtree(db_dir)
+        shutil.move(extracted_db, db_dir)
+        shutil.rmtree(os.path.join(target_dir, "spider_data"), ignore_errors=True)
 
     os.remove(zip_path)
 
     if not os.path.exists(db_dir):
-        print("AVISO: pasta 'database' não encontrada no zip. Conteúdo extraído:")
-        for item in os.listdir(target_dir):
-            print(f"  - {item}")
         raise FileNotFoundError("Pasta 'database' não encontrada após extração")
 
-    print("Bancos de dados baixados com sucesso!")
+    num_dbs = len([d for d in os.listdir(db_dir) if os.path.isdir(os.path.join(db_dir, d))])
+    print(f"Bancos de dados baixados com sucesso! ({num_dbs} bancos)")
 
 
 def format_schema(db_id: str, db_dir: str = "data/spider/database") -> str:
