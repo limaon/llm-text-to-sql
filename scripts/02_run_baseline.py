@@ -97,18 +97,27 @@ def run_baseline(
         print(f"[{i+1}/{max_samples}] SQL gerado | db={entry['db_id']}")
 
     print(f"\nAvaliando com Execution Accuracy (DeepEval)...")
-    eval_results = evaluate(test_cases, [metric])
+    evaluate(test_cases, [metric])
 
     results = []
-    for i, entry in enumerate(dev_data[:max_samples]):
+    correct_count = 0
+
+    for i, test_case in enumerate(test_cases):
+        score = test_case.metrics_metadata[0].score if test_case.metrics_metadata else 0.0
+        is_correct = bool(score == 1.0)
+
+        if is_correct:
+            correct_count += 1
+
         results.append({
-            "question": entry["messages"][1]["content"],
+            "question": dev_data[i]["messages"][1]["content"],
             "generated_sql": generated_outputs[i],
-            "expected_sql": entry["expected_sql"],
-            "db_id": entry["db_id"],
+            "expected_sql": dev_data[i]["expected_sql"],
+            "db_id": dev_data[i]["db_id"],
+            "correct": is_correct,
         })
 
-    accuracy = eval_results.overall_score if hasattr(eval_results, "overall_score") else 0.0
+    accuracy = correct_count / len(test_cases) if test_cases else 0.0
 
     with open(output_path, "w") as f:
         json.dump({"accuracy": accuracy, "details": results}, f, indent=2)
